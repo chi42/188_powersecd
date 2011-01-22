@@ -1,0 +1,52 @@
+POWERSECZONE API - for obtaining information about power and security
+
+- Overview
+    - We PowerSecZone API is intended to provide user-space applications the 
+      ability to see what the current power and threat levels are for the 
+      computer, so that applications can make changes at runtime to conserve 
+      power. 
+ 
+- Power Level
+    - Advanced Configuration and Power Interface (ACPI) - 
+      We propose leveraging the existing ACPI interface that already comes
+      preinstalled on Most modern Linux distributio. ACPI allows user-space 
+      programs to obtain the system's power info (including current battery 
+      level and whether or not the machine is plugged in) through either 
+      '/proc/acpi/' or by calling the 'acpi' program.
+
+- Threat Level
+    - Because there currently does not exist a method for evaluating threat
+      levels, we must write our own. Ideally, threat levels will be 
+      evaluated based upon numberous variables, including (but not limited to) 
+      whether or not the machine is connected to a network, how trustworthy
+      the network is, the amount of elapsed time since the last security
+      update, and also the discretion of the user. However, because the 
+      intent of this project is not to find an accurate way to measure threat
+      levels, we will be simplifying this significantly and only considering
+      a few variables, such as whether or not the machine has an Internet
+      connection. The threat level will be expressed as an integer in the
+      range of 1-5 (this range may be subject to change), where a larger number
+      indicates a more hostile environment.  
+
+- Interface
+    - Because a great deal of the information needed to evaluate threat levels
+      is more easily obtained from the user-space, it is not ideal to place the
+      threat level information in the '/proc/' folder. Keeping the threat-level
+      functionality in the user-space instead of the kernel-space is also more 
+      secure. 
+
+      Instead, we will create a PowerSecZone daemon that consolidates 
+      both the ACPI power and threat level information. The daemon will be able 
+      to communicate to other processes via Unix sockets (IPC sockets). In
+      order to eliminate the need for processes to constantly poll for changes
+      to the threat or power levels, the daemon will also be able to send 
+      signals to processes when an important change occurs to the threat or
+      power levels (i.e. the computer is plugged back in, or suddenly enters a
+      very unsecure environment). 
+
+      Note that IPC sockets and signals are accessible to most of the common
+      programming languages used in Linux. Therefore, although our daemon will
+      be written in C, programs written in languages such as Python, C, or BASH
+      will be able to make use of our API. 
+      
+    
