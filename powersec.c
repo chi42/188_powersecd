@@ -16,18 +16,26 @@
 static const char *pidfile = PID_FILE;
 
 static int daemonize(pid_t *pid, pid_t *sid);
-static void clean_exit(int exit_status);
+static void sigterm_exit(int sig);
+static void cleanup();
 
 static
-void clean_exit(int exit_status)
+void sigterm_exit(int sig)
 {
+  cleanup();
+  syslog(LOG_INFO, "Recieved SIGTERM, exiting cleanly.\n");
 
-  unlink(pidfile);
-  syslog(LOG_INFO, "Daemon exiting cleanly.\n");
-  closelog();
-
-  exit(exit_status);
+  exit(EXIT_SUCCESS);
 }
+
+
+static
+void cleanup()
+{
+  unlink(pidfile);
+  closelog();
+}
+
 static
 int daemonize(pid_t *pid, pid_t *sid)
 {
@@ -55,8 +63,11 @@ int daemonize(pid_t *pid, pid_t *sid)
 
   // there are many signals that we should ignore
   signal(SIGCHLD, SIG_IGN);
+  signal(SIGTERM, sigterm_exit);
 
   // get the pid file and lock it
+  // lock file is also locked by the starting script, but we also
+  //    leave this here for the sake of things
   //unlink(pidfile);
   fd = open(pidfile, O_WRONLY|O_CREAT, 640);
   if (fd >= 0) {
@@ -95,11 +106,13 @@ int main(void)
     exit(EXIT_FAILURE);
   }
 
+  syslog(LOG_INFO, "powersecd started.\n");
+
   while(1) {
 
     sleep(5);
+
   }
 
-  clean_exit(EXIT_SUCCESS);
-
+  return 0;
 }
