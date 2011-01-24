@@ -12,8 +12,10 @@
 #include <signal.h>
 
 #include "powersec.h"
+#include "ps_sockets.h"
 
 static const char *pidfile = PID_FILE;
+static const char *socketname = SOCKET_NAME;
 
 static int daemonize(pid_t *pid, pid_t *sid);
 static void sigterm_exit(int sig);
@@ -32,6 +34,7 @@ void sigterm_exit(int sig)
 static
 void cleanup()
 {
+  unlink(socketname);
   unlink(pidfile);
   closelog();
 }
@@ -101,12 +104,21 @@ int main(void)
 {
   pid_t pid, sid;
 
+  int s_fd = -1;
+
+  s_fd = socket_create(socketname);
+  if (s_fd < 0) {
+    fprintf(stderr, "Error in binding sockets.\n");
+    exit(EXIT_FAILURE);
+  }
+
   if (daemonize(&pid, &sid) < 0) {
     fprintf(stderr, "Error in daemonizing process, goodbye.\n");
     exit(EXIT_FAILURE);
   }
 
   syslog(LOG_INFO, "powersecd started.\n");
+
 
   while(1) {
 

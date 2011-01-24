@@ -4,11 +4,16 @@
 
 #include  "ps_sockets.h"
 
+// for testing purpose only...
+//#include <stdio.h>
+
 int socket_create(const char *soc_name) 
 {
   int fd, res;
-
   struct sockaddr_un s_addr;
+
+  // just in case
+  unlink(soc_name);
   
   fd = socket(AF_UNIX, SOCK_STREAM, 0);
   if (fd < 0) 
@@ -29,4 +34,5 @@ int socket_create(const char *soc_name)
 
   return fd;
 }
+
 
