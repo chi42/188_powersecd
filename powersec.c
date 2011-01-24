@@ -3,30 +3,31 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
 #include <syslog.h>
-#include <string.h>
+#include <signal.h>
 
-#include "powersec.d"
+#include "powersec.h"
 
-static const char *pidfile = PID_FILE
+static const char *pidfile = PID_FILE;
 
 static int daemonize(pid_t *pid, pid_t *sid);
-static void clean_exit(void);
+static void clean_exit(int exit_status);
 
 static
-void clean_exit(void);
+void clean_exit(int exit_status)
 {
 
   unlink(pidfile);
-  
+  syslog(LOG_INFO, "Daemon exiting cleanly.\n");
+  closelog();
 
-
+  exit(exit_status);
 }
-
 static
 int daemonize(pid_t *pid, pid_t *sid)
 {
@@ -48,45 +49,57 @@ int daemonize(pid_t *pid, pid_t *sid)
   // clear file mask
   umask(0);
 
+  // go to root dir
   if (chdir("/") < 0)
     return -1;
 
-  openlog(DAEMON, LOG_NDELAY, LOG_DAEMON);
+  // there are many signals that we should ignore
+  signal(SIGCHLD, SIG_IGN);
 
-  unlink(pidfile);
-  fd = open(pidfile,_WRONLY|O_CREAT|O_EXCL, 644);
+  // get the pid file and lock it
+  //unlink(pidfile);
+  fd = open(pidfile, O_WRONLY|O_CREAT, 640);
   if (fd >= 0) {
-    bzero(pid_string, 10);
-    snprintf(pid_string, 9, "%d", getpid());
-    write(fd, pid_string, 9);
-    // note, leave PID_FILE open in case it gets unlinked by another
-    // program
+    if (lockf(fd, F_TLOCK, 0) >= 0) {
+      bzero(pid_string, 10);
+      snprintf(pid_string, 9, "%d\n", getpid());
+      write(fd, pid_string, 9);
+      // note, leave PID_FILE open in case it gets unlinked by another
+      // program
+
+      // daemons do not run in a tty, so these STD files are not needed
+      // leaving them around is a potential security vulnerability?
+      close(STDIN_FILENO);
+      close(STDOUT_FILENO);
+      close(STDERR_FILENO);
+
+      // finally open for logging
+      openlog(DAEMON, LOG_NDELAY, LOG_DAEMON);
+
+      return 0;
+    }
   }
-  else
-    return -1;
-
-  // daemons do not run in a tty, so these STD files are not needed
-  // leaving them around is a potential security vulnerability?
-  close(STDIN_FILENO);
-  close(STDOUT_FILENO);
-  close(STDERR_FILENO);
-
-  return 0;
+  // else failed to lock pidfile
+  fprintf(stderr, 
+	  "Could not create/lock " PID_FILE ", is the daemon already running?\n");
+  return -1;
 }
 
 
 int main(void)
 {
-
   pid_t pid, sid;
-  printf("hello world!\n");
+
   if (daemonize(&pid, &sid) < 0) {
     fprintf(stderr, "Error in daemonizing process, goodbye.\n");
     exit(EXIT_FAILURE);
   }
 
   while(1) {
+
     sleep(5);
   }
-  exit(EXIT_SUCCESS); 
+
+  clean_exit(EXIT_SUCCESS);
+
 }
