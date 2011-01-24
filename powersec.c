@@ -10,9 +10,22 @@
 #include <syslog.h>
 #include <string.h>
 
-#define DAEMON     "powersecd"
-#define PID_FILE   "/var/run/npowersecd.pid"
+#include "powersec.d"
 
+static const char *pidfile = PID_FILE
+
+static int daemonize(pid_t *pid, pid_t *sid);
+static void clean_exit(void);
+
+static
+void clean_exit(void);
+{
+
+  unlink(pidfile);
+  
+
+
+}
 
 static
 int daemonize(pid_t *pid, pid_t *sid)
@@ -40,8 +53,8 @@ int daemonize(pid_t *pid, pid_t *sid)
 
   openlog(DAEMON, LOG_NDELAY, LOG_DAEMON);
 
-  unlink(PID_FILE);
-  fd = open(PID_FILE, O_WRONLY|O_CREAT|O_EXCL, 644);
+  unlink(pidfile);
+  fd = open(pidfile,_WRONLY|O_CREAT|O_EXCL, 644);
   if (fd >= 0) {
     bzero(pid_string, 10);
     snprintf(pid_string, 9, "%d", getpid());
@@ -68,7 +81,7 @@ int main(void)
   pid_t pid, sid;
   printf("hello world!\n");
   if (daemonize(&pid, &sid) < 0) {
-    fprintf(stderr, "Error in daemonizing process, goodbye.");
+    fprintf(stderr, "Error in daemonizing process, goodbye.\n");
     exit(EXIT_FAILURE);
   }
 
