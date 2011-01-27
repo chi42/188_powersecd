@@ -46,8 +46,7 @@ int ps_accept(int fd, struct ps_ucred *cred)
   while (1) {
     new_fd = accept(fd, (struct sockaddr *)&client, &len);
     if (new_fd < 0) {
-      // if accept failed because of an interrupt, we keep 
-      //    looping...
+      // if accept failed because of an interrupt, we kee  looping...
       if (errno == EINTR) 
         continue;
       else

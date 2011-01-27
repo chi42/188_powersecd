@@ -139,10 +139,17 @@ int main(void)
     tv.tv_usec = 0;
     tv.tv_sec  = SLEEP_TIME; 
     
-    r = select(s_fd + 1, &r_fds, NULL, NULL, &tv);
+    //r = select(s_fd + 1, &r_fds, NULL, NULL, &tv);
+    // something wrong with the select statement going on here...
+    // it is not polling the socket correctly, claims there is 
+    // no connection when clearly there is one
+    // FIXME FIXME FIXME
+    sleep(5);
+    r = 1;
+
     if (r > 0) {
       ps_accept(s_fd, &cred);  
-      syslog(LOG_INFO, "POWERSECD PID: %d\n", cred.uid);
+      syslog(LOG_INFO, "POWERSECD PID: %d\n", cred.pid);
       
     }
     else if (r < 0)
