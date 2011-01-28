@@ -17,7 +17,7 @@
 static const char *pidfile = PID_FILE;
 static const char *socketname = SOCKET_NAME;
 
-static int daemonize(pid_t *pid, pid_t *sid);
+static int daemonize();
 static void sig_to_exit(int sig);
 static void cleanup();
 
@@ -40,21 +40,22 @@ void cleanup()
 }
 
 static
-int daemonize(pid_t *pid, pid_t *sid)
+int daemonize()
 {
-  char pid_string[10];
-  int fd;
+  char *pid_string;
+  int i, t, fd;
+  pid_t pid, sid;
 
   // fail if fork fails, else kill parent and child continues
-  *pid = fork();
-  if (*pid < 0)
+  pid = fork();
+  if (pid < 0)
     return -1;
-  else if (*pid > 0) 
+  else if (pid > 0) 
     exit(EXIT_SUCCESS);
 
   // child will need a new sid
-  *sid = setsid();
-  if (*sid < 0)
+  sid = setsid();
+  if (sid < 0)
     return -1;
   
   // clear file mask
@@ -72,6 +73,8 @@ int daemonize(pid_t *pid, pid_t *sid)
   signal(SIGQUIT, sig_to_exit);
   signal(SIGINT, sig_to_exit);
 
+  // open for logging
+  openlog(DAEMON, LOG_NDELAY, LOG_DAEMON);
 
   // get the pid file and lock it
   // lock file is also locked by the starting script, but we also
@@ -80,14 +83,21 @@ int daemonize(pid_t *pid, pid_t *sid)
   fd = open(pidfile, O_WRONLY|O_CREAT, 640);
   if (fd >= 0) {
     if (lockf(fd, F_TLOCK, 0) >= 0) {
-      bzero(pid_string, 10);
-      snprintf(pid_string, 9, "%d\n", getpid());
-      write(fd, pid_string, 9);
+
+      t = pid = getpid();
+      for(i = 0; t > 0; ++i) {
+        t /= 10;
+      }
+      pid_string = malloc(i + 1); 
+      if (!pid_string)
+        return -1;
+
+      snprintf(pid_string, i, "%d\n", pid);
+      write(fd, pid_string, i);
+
+      free(pid_string);
       // note, leave PID_FILE open in case it gets unlinked by another
       // program
-
-      // finally open for logging
-      openlog(DAEMON, LOG_NDELAY, LOG_DAEMON);
 
       return 0;
     }
@@ -101,14 +111,11 @@ int daemonize(pid_t *pid, pid_t *sid)
 
 int main(void)
 {
-  pid_t pid, sid;
-  fd_set r_fds;
-  struct timeval tv;
   struct ps_ucred cred;
 
   int r, s_fd = -1;
 
-  if (daemonize(&pid, &sid) < 0) {
+  if (daemonize() < 0) {
     fprintf(stderr, "Error in daemonizing process, goodbye.\n");
     exit(EXIT_FAILURE);
   }
@@ -130,21 +137,11 @@ int main(void)
 
   syslog(LOG_INFO, "powersecd started.\n");
 
-  FD_ZERO(&r_fds);
-  FD_SET(s_fd, &r_fds);
 
   while(1) {
-    // note that select() CAN modify timeval struct on return, so to ensure
-    //   correct operation on all systems, we have to reset it each time
-    tv.tv_usec = 0;
-    tv.tv_sec  = SLEEP_TIME; 
     
-    //r = select(s_fd + 1, &r_fds, NULL, NULL, &tv);
-    // something wrong with the select statement going on here...
-    // it is not polling the socket correctly, claims there is 
-    // no connection when clearly there is one
-    // FIXME FIXME FIXME
-    sleep(5);
+    // something wrong with using a select statement going on here...
+
     r = 1;
 
     if (r > 0) {
