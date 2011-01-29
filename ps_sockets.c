@@ -36,6 +36,14 @@ int ps_create(const char *soc_name)
   return fd;
 }
 
+// inputs: 
+//    cred: may be a null pointer, in which case no additional actions
+//          non-null pointer, we attempt to get the identity of the 
+//          communicating process
+// return:
+//    new socket fd on success (value >= 0)
+//    -1 on EINTR
+//    -2 on failure to accept new conneciton       
 int ps_accept(int fd, struct ps_ucred *cred) 
 {
   int new_fd, len;
@@ -43,15 +51,14 @@ int ps_accept(int fd, struct ps_ucred *cred)
 
   len = sizeof(struct sockaddr_un);  
 
-  while (1) {
-    new_fd = accept(fd, (struct sockaddr *)&client, &len);
-    if (new_fd < 0) {
-      // if accept failed because of an interrupt, we kee  looping...
-      if (errno == EINTR) 
-        continue;
-      else
-        return new_fd;
-    }
+  new_fd = accept(fd, (struct sockaddr *)&client, &len);
+  if (new_fd < 0) {
+    // if ended early due to errno, then *probably* SIGALRM was raised,
+    //    indicating that this operation timed out
+    if (errno == EINTR)  
+      return -1; 
+    else
+      return -2;
 
     if (cred) {
       len = sizeof(struct ps_ucred);
@@ -60,7 +67,5 @@ int ps_accept(int fd, struct ps_ucred *cred)
     return new_fd;
   }
 
-  // this will probably keep some compilers happy (i think) 
-  return -1;
+  return -2;
 }
-

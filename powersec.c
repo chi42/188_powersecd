@@ -10,6 +10,7 @@
 #include <syslog.h>
 #include <signal.h>
 #include <sys/signal.h>
+#include <sys.time.h>
 
 #include "powersec.h"
 #include "ps_sockets.h"
@@ -19,6 +20,7 @@ static const char *socketname = SOCKET_NAME;
 
 static int daemonize();
 static void sig_to_exit(int sig);
+static void sig_alarm(int sig);
 static void cleanup();
 
 static
@@ -30,6 +32,15 @@ void sig_to_exit(int sig)
   exit(EXIT_SUCCESS);
 }
 
+static
+void sig_alarm(int sig) 
+{
+  
+  // fetch new data 
+  
+  // handle signalling to clients, close connections to clients
+  // that are dead
+}
 
 static
 void cleanup()
@@ -69,6 +80,7 @@ int daemonize()
   //signal(SIGHUP, reload_conf);
   signal(SIGCHLD, SIG_IGN);
   signal(SIGPIPE, SIG_IGN);
+  signal(SIGALRM, sig_alarm);
   signal(SIGTERM, sig_to_exit);
   signal(SIGQUIT, sig_to_exit);
   signal(SIGINT, sig_to_exit);
@@ -112,7 +124,7 @@ int daemonize()
 int main(void)
 {
   struct ps_ucred cred;
-
+  struct itimerval timer_v;
   int r, s_fd = -1;
 
   if (daemonize() < 0) {
@@ -140,19 +152,19 @@ int main(void)
 
   while(1) {
     
-    // something wrong with using a select statement going on here...
+    // set up timer, it will be raised regularly
+    timer_v.it_interval.tv_sec  = SLEEP_SEC;
+    timer_v.it_interval.tv_usec = SLEEP_USEC;
+    timer_v.it_value.tv_sec  = SLEEP_SEC;
+    timer_v.it_value.tv_usec = SLEEP_USEC;
+    setitimer(ITIMER_REAL, &timer_v);
 
-    r = 1;
-
-    if (r > 0) {
-      ps_accept(s_fd, &cred);  
-      syslog(LOG_INFO, "POWERSECD PID: %d\n", cred.pid);
-      
-    }
-    else if (r < 0)
-      if (errno != EINTR)
-        syslog(LOG_ERR, "Error in polling for new connections.\n");
-  }
+    ps_accept(s_fd, &cred);  
+    syslog(LOG_INFO, "POWERSECD PID: %d\n", cred.pid);
+    
+    if (errno != EINTR)
+      syslog(LOG_ERR, "Error in polling for new connections.\n");
 
   return 0;
 }
+
