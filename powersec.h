@@ -9,6 +9,11 @@
 // daemon actions, in seconds 
 #define SLEEP_TIME   5
 
+typedef struct i_powersect {
+  int a;
+  int b;
+//bunch of stuff
+} i_powersec;
 
 #endif
 

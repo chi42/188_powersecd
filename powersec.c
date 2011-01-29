@@ -11,6 +11,7 @@
 #include <signal.h>
 #include <sys/signal.h>
 #include <sys.time.h>
+#include <pthread.h>
 
 #include "powersec.h"
 #include "ps_sockets.h"
@@ -22,6 +23,9 @@ static int daemonize();
 static void sig_to_exit(int sig);
 static void sig_alarm(int sig);
 static void cleanup();
+
+static i_powersec prime_dat;
+static 
 
 static
 void sig_to_exit(int sig)
@@ -110,6 +114,14 @@ int daemonize()
       free(pid_string);
       // note, leave PID_FILE open in case it gets unlinked by another
       // program
+     
+      // daemons do not run in a tty, so these STD files are not needed
+      // leaving them around is a potential security vulnerability?
+      // also, even in the case where we don't want to daemonize, probably
+      // do not want to print out to stdout/err anyways...
+      close(STDIN_FILENO);
+      close(STDOUT_FILENO);
+      close(STDERR_FILENO);
 
       return 0;
     }
@@ -127,38 +139,28 @@ int main(void)
   struct itimerval timer_v;
   int r, s_fd = -1;
 
-  if (daemonize() < 0) {
-    fprintf(stderr, "Error in daemonizing process, goodbye.\n");
-    exit(EXIT_FAILURE);
-  }
-
   // open up socket, start listening
   s_fd = ps_create(socketname);
   if (s_fd < 0) {
     fprintf(stderr, "Error in binding sockets.\n");
     exit(EXIT_FAILURE);
   }
-
-  // daemons do not run in a tty, so these STD files are not needed
-  // leaving them around is a potential security vulnerability?
-  // also, even in the case where we don't want to daemonize, probably
-  // do not want to print out to stdout/err anyways...
-  close(STDIN_FILENO);
-  close(STDOUT_FILENO);
-  close(STDERR_FILENO);
+  // daemonize
+  if (daemonize() < 0) {
+    fprintf(stderr, "Error in daemonizing process, goodbye.\n");
+    exit(EXIT_FAILURE);
+  }
 
   syslog(LOG_INFO, "powersecd started.\n");
-
+ 
+  // set up timer, it will be raised regularly
+  timer_v.it_interval.tv_sec  = SLEEP_SEC;
+  timer_v.it_interval.tv_usec = SLEEP_USEC;
+  timer_v.it_value.tv_sec  = SLEEP_SEC;
+  timer_v.it_value.tv_usec = SLEEP_USEC;
+  setitimer(ITIMER_REAL, &timer_v);
 
   while(1) {
-    
-    // set up timer, it will be raised regularly
-    timer_v.it_interval.tv_sec  = SLEEP_SEC;
-    timer_v.it_interval.tv_usec = SLEEP_USEC;
-    timer_v.it_value.tv_sec  = SLEEP_SEC;
-    timer_v.it_value.tv_usec = SLEEP_USEC;
-    setitimer(ITIMER_REAL, &timer_v);
-
     ps_accept(s_fd, &cred);  
     syslog(LOG_INFO, "POWERSECD PID: %d\n", cred.pid);
     
