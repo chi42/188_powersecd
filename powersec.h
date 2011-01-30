@@ -7,7 +7,8 @@
 #define SOCKET_NAME  "/var/run/powersecd.socket"
 // SLEEP_TIME specifies the amount of time between 
 // daemon actions, in seconds 
-#define SLEEP_TIME   5
+#define SLEEP_SEC   8
+#define SLEEP_USEC  0
 
 typedef struct i_powersect {
   int a;

@@ -42,30 +42,32 @@ int ps_create(const char *soc_name)
 //          communicating process
 // return:
 //    new socket fd on success (value >= 0)
-//    -1 on EINTR
-//    -2 on failure to accept new conneciton       
+//    < 0 on EINTR
+// behaviour:
+//    blocks until a new connection is ready, if interrupted by a signal
+//    ps_accept will awaken and then block again until a new connection
 int ps_accept(int fd, struct ps_ucred *cred) 
 {
-  int new_fd, len;
+  int len, new_fd;
   struct sockaddr_un client;
 
   len = sizeof(struct sockaddr_un);  
 
-  new_fd = accept(fd, (struct sockaddr *)&client, &len);
-  if (new_fd < 0) {
-    // if ended early due to errno, then *probably* SIGALRM was raised,
-    //    indicating that this operation timed out
-    if (errno == EINTR)  
-      return -1; 
-    else
-      return -2;
-
-    if (cred) {
-      len = sizeof(struct ps_ucred);
-      getsockopt(new_fd, SOL_SOCKET, SO_PEERCRED, cred, &len);
+  while(1) {
+    new_fd = accept(fd, (struct sockaddr *)&client, &len);
+    if (new_fd < 0) {
+      // if ended early due to EINTR, then *most likely* SIGALRM was raised,
+      if (errno != EINTR)  
+        return new_fd;
     }
-    return new_fd;
+    else 
+      break;
   }
 
-  return -2;
+  if (cred) {
+    len = sizeof(struct ps_ucred);
+    getsockopt(new_fd, SOL_SOCKET, SO_PEERCRED, cred, &len);
+  }
+
+  return new_fd;
 }

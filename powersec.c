@@ -9,11 +9,10 @@
 #include <errno.h>
 #include <syslog.h>
 #include <signal.h>
-#include <sys/signal.h>
-#include <sys.time.h>
-#include <pthread.h>
+#include <sys/time.h>
 
 #include "powersec.h"
+#include "ps_list.h"
 #include "ps_sockets.h"
 
 static const char *pidfile = PID_FILE;
@@ -24,8 +23,7 @@ static void sig_to_exit(int sig);
 static void sig_alarm(int sig);
 static void cleanup();
 
-static i_powersec prime_dat;
-static 
+static i_powersec dat;
 
 static
 void sig_to_exit(int sig)
@@ -41,7 +39,6 @@ void sig_alarm(int sig)
 {
   
   // fetch new data 
-  
   // handle signalling to clients, close connections to clients
   // that are dead
 }
@@ -101,14 +98,14 @@ int daemonize()
     if (lockf(fd, F_TLOCK, 0) >= 0) {
 
       t = pid = getpid();
-      for(i = 0; t > 0; ++i) {
+      for(i = 1; t > 0; ++i) {
         t /= 10;
       }
-      pid_string = malloc(i + 1); 
+      pid_string = malloc(i + 2); 
       if (!pid_string)
         return -1;
 
-      snprintf(pid_string, i, "%d\n", pid);
+      snprintf(pid_string, i + 1, "%d\n", pid);
       write(fd, pid_string, i);
 
       free(pid_string);
@@ -137,6 +134,7 @@ int main(void)
 {
   struct ps_ucred cred;
   struct itimerval timer_v;
+  sigset_t sigs;
   int r, s_fd = -1;
 
   // open up socket, start listening
@@ -145,28 +143,32 @@ int main(void)
     fprintf(stderr, "Error in binding sockets.\n");
     exit(EXIT_FAILURE);
   }
-  // daemonize
   if (daemonize() < 0) {
     fprintf(stderr, "Error in daemonizing process, goodbye.\n");
     exit(EXIT_FAILURE);
   }
 
   syslog(LOG_INFO, "powersecd started.\n");
- 
+  // sigs structure is set up, no need to change it again  
+  sigemptyset(&sigs);
+  sigaddset(&sigs, SIGALRM);
+
   // set up timer, it will be raised regularly
   timer_v.it_interval.tv_sec  = SLEEP_SEC;
   timer_v.it_interval.tv_usec = SLEEP_USEC;
   timer_v.it_value.tv_sec  = SLEEP_SEC;
   timer_v.it_value.tv_usec = SLEEP_USEC;
-  setitimer(ITIMER_REAL, &timer_v);
+  setitimer(ITIMER_REAL, &timer_v, NULL);
 
   while(1) {
     ps_accept(s_fd, &cred);  
+
+    sigprocmask(SIG_BLOCK, &sigs, NULL);
+
     syslog(LOG_INFO, "POWERSECD PID: %d\n", cred.pid);
     
-    if (errno != EINTR)
-      syslog(LOG_ERR, "Error in polling for new connections.\n");
-
+    sigprocmask(SIG_UNBLOCK, &sigs, NULL);
+  }
   return 0;
 }
 
