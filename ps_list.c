@@ -70,6 +70,7 @@ int ps_list_free(ps_list *list)
       b = a->next;
       free(a);
       a = b;   
+      list->size -= 1;
     }
   } 
 
