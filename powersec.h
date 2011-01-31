@@ -9,6 +9,8 @@
 // daemon actions, in seconds 
 #define SLEEP_SEC   8
 #define SLEEP_USEC  0
+// not sure what this signal is going to be yet...
+#define ALERT_SIG   SIGUSR1
 
 typedef struct i_powersect {
   int a;

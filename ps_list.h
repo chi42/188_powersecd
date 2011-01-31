@@ -5,6 +5,7 @@
 
 typedef struct client_node_t {
   int c_fd;
+  int pid;
   uint8_t signal;
   struct client_node_t *next;
   struct client_node_t *prev;

@@ -10,11 +10,15 @@
 #include <syslog.h>
 #include <signal.h>
 #include <sys/time.h>
+#include <stdint.h>
 
 #include "powersec.h"
 #include "ps_list.h"
 #include "ps_sockets.h"
 
+// in hopes of reducing memory usage
+// is this actually necessary or will the compiler do magic to make it
+// happen for me?
 static const char *pidfile = PID_FILE;
 static const char *socketname = SOCKET_NAME;
 
@@ -23,7 +27,7 @@ static void sig_to_exit(int sig);
 static void sig_alarm(int sig);
 static void cleanup();
 
-static i_powersec dat;
+static ps_list g_clients;
 
 static
 void sig_to_exit(int sig)
@@ -37,10 +41,16 @@ void sig_to_exit(int sig)
 static
 void sig_alarm(int sig) 
 {
-  
+  client_node *cn;
+
   // fetch new data 
-  // handle signalling to clients, close connections to clients
-  // that are dead
+
+  syslog(LOG_INFO, "RECIEVED SIGLARAM\n");
+
+  while(cn = ps_list_next(&g_clients)) {
+    if (cn->signal) 
+      kill(cn->pid, ALERT_SIG);
+  }
 }
 
 static
@@ -134,8 +144,10 @@ int main(void)
 {
   struct ps_ucred cred;
   struct itimerval timer_v;
+  client_node *nd;
   sigset_t sigs;
-  int r, s_fd = -1;
+  int r, c_fd, s_fd = -1;
+  uint8_t temp;
 
   // open up socket, start listening
   s_fd = ps_create(socketname);
@@ -153,6 +165,8 @@ int main(void)
   sigemptyset(&sigs);
   sigaddset(&sigs, SIGALRM);
 
+  ps_list_init(&g_clients);
+
   // set up timer, it will be raised regularly
   timer_v.it_interval.tv_sec  = SLEEP_SEC;
   timer_v.it_interval.tv_usec = SLEEP_USEC;
@@ -161,14 +175,29 @@ int main(void)
   setitimer(ITIMER_REAL, &timer_v, NULL);
 
   while(1) {
-    ps_accept(s_fd, &cred);  
+    c_fd = ps_accept(s_fd, &cred);  
+  
+    if (c_fd >= 0) {
+      nd = malloc(sizeof(client_node));
+      nd->c_fd = c_fd;
+      nd->pid  = cred.pid; 
+        
+      // don't really care about what is read, just as long as we get something
+      // NOTE: c_fd is returned by ps_accept as a non-blocking socket!
+      //    therefore, this read() will return immediately!
+      if (read(c_fd, &temp, 1) > 0)
+        nd->signal = 1;
+      else 
+        nd->signal = 0;
 
-    sigprocmask(SIG_BLOCK, &sigs, NULL);
+      // now we enter the critical section, block delievery of SIGALARM 
+      sigprocmask(SIG_BLOCK, &sigs, NULL);
 
-    syslog(LOG_INFO, "POWERSECD PID: %d\n", cred.pid);
-    
-    sigprocmask(SIG_UNBLOCK, &sigs, NULL);
+      ps_list_add(&g_clients, nd);
+      
+      sigprocmask(SIG_UNBLOCK, &sigs, NULL);
+      // end of critical section, unblock SIGALARM
+    }
   }
   return 0;
 }
-

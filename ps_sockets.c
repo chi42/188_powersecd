@@ -2,6 +2,10 @@
 #include <sys/types.h>
 #include <sys/un.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <unistd.h>
+#include <unistd.h>
 
 #include  "ps_sockets.h"
 
@@ -63,6 +67,9 @@ int ps_accept(int fd, struct ps_ucred *cred)
     else 
       break;
   }
+
+  // this socket is non blocking!!!
+  fcntl(new_fd, F_SETFL, O_NONBLOCK);
 
   if (cred) {
     len = sizeof(struct ps_ucred);
