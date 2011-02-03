@@ -12,6 +12,8 @@
 #include <sys/time.h>
 #include <stdint.h>
 
+#include <sys/select.h>
+
 #include "powersec.h"
 #include "ps_list.h"
 #include "ps_sockets.h"
@@ -149,6 +151,9 @@ int main(void)
   int r, c_fd, s_fd = -1;
   uint8_t temp;
 
+  fd_set rdfs;
+  struct timeval tv;  
+
   // open up socket, start listening
   s_fd = ps_create(socketname);
   if (s_fd < 0) {
@@ -175,7 +180,16 @@ int main(void)
   setitimer(ITIMER_REAL, &timer_v, NULL);
 
   while(1) {
+
+    r = -1;
+    while(r < 0) {
+      FD_ZERO(&rdfs);
+      FD_SET(c_fd, &rdfs);
+      r = select(c_fd + 1, &rdfs, NULL, NULL, NULL);
+    }
+
     c_fd = ps_accept(s_fd, &cred);  
+  
   
     if (c_fd >= 0) {
       nd = malloc(sizeof(client_node));
