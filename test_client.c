@@ -12,11 +12,19 @@
 
 #define SOCK_PATH "/var/run/powersecd.socket"
 
+void handler(int sign) 
+{
+        //printf("SIGNAL reccieved!\n");
+    return;
+}
+
 int main(void)
 {
     int s, t, len;
     struct sockaddr_un remote;
     char str[100];
+
+    signal(SIGUSR1, handler);
 
     if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
         perror("socket");

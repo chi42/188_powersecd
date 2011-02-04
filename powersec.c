@@ -12,8 +12,6 @@
 #include <sys/time.h>
 #include <stdint.h>
 
-#include <sys/select.h>
-
 #include "powersec.h"
 #include "ps_list.h"
 #include "ps_sockets.h"
@@ -23,13 +21,16 @@
 // happen for me?
 static const char *pidfile = PID_FILE;
 static const char *socketname = SOCKET_NAME;
+static const char *dat_socketname = DATA_SOCKET;
 
-static int daemonize();
+// global list of client processes
+static ps_list g_clients;
+
+static int daemonize(const char *pfile);
 static void sig_to_exit(int sig);
 static void sig_alarm(int sig);
 static void cleanup();
-
-static ps_list g_clients;
+static void *ps_listen_thread(void *ps_args);
 
 static
 void sig_to_exit(int sig)
@@ -44,14 +45,19 @@ static
 void sig_alarm(int sig) 
 {
   client_node *cn;
+  int a;
 
-  // fetch new data 
+  // fetch new data here
 
-  syslog(LOG_INFO, "RECIEVED SIGLARAM\n");
 
   while(cn = ps_list_next(&g_clients)) {
     if (cn->signal) 
-      kill(cn->pid, ALERT_SIG);
+      if( write(cn->c_fd, &a, 1) < 0) {
+        syslog(LOG_INFO, "FOUND BAD NODE, DUMPING\n");
+        ps_list_del(&g_clients, cn);
+      } 
+      else 
+        kill(cn->pid, ALERT_SIG);
   }
 }
 
@@ -63,11 +69,19 @@ void cleanup()
   closelog();
 }
 
+static 
+void data_proc()
+{
+  daemonize(NULL);
+
+}
+
 static
-int daemonize()
+int daemonize(const char *pfile)
 {
   char *pid_string;
   int i, t, fd;
+  struct sigaction s_action;
   pid_t pid, sid;
 
   // fail if fork fails, else kill parent and child continues
@@ -89,58 +103,72 @@ int daemonize()
   if (chdir("/") < 0)
     return -1;
 
+  memset(&s_action, 0, sizeof(struct sigaction));
   // there are many signals that we need to handle carefully 
+  // NOTE: we MUST use sigaction, signal() is not thread safe
   //signal(SIGHUP, reload_conf);
-  signal(SIGCHLD, SIG_IGN);
-  signal(SIGPIPE, SIG_IGN);
-  signal(SIGALRM, sig_alarm);
-  signal(SIGTERM, sig_to_exit);
-  signal(SIGQUIT, sig_to_exit);
-  signal(SIGINT, sig_to_exit);
+  s_action.sa_handler = SIG_IGN;
+  sigaction(SIGCHLD, &s_action, NULL);
+  sigaction(SIGPIPE, &s_action, NULL);
+
+  s_action.sa_handler = sig_alarm;
+  sigaction(SIGALRM, &s_action, NULL);
+
+  s_action.sa_handler = sig_to_exit;
+  sigaction(SIGTERM, &s_action, NULL);
+  sigaction(SIGQUIT, &s_action, NULL);
+  sigaction(SIGINT,  &s_action, NULL);
 
   // open for logging
   openlog(DAEMON, LOG_NDELAY, LOG_DAEMON);
 
-  // get the pid file and lock it
-  // lock file is also locked by the starting script, but we also
-  //    leave this here for the sake of things
-  //unlink(pidfile);
-  fd = open(pidfile, O_WRONLY|O_CREAT, 640);
-  if (fd >= 0) {
-    if (lockf(fd, F_TLOCK, 0) >= 0) {
+  if(pfile) {
+    // get the pid file and lock it
+    // lock file is also locked by the starting script, but we also
+    //    leave this here for the sake of things
+    fd = open(pfile, O_WRONLY|O_CREAT, 640);
+    if (fd >= 0) {
+      if (lockf(fd, F_TLOCK, 0) >= 0) {
 
-      t = pid = getpid();
-      for(i = 1; t > 0; ++i) {
-        t /= 10;
+        t = pid = getpid();
+        for(i = 1; t > 0; ++i) {
+          t /= 10;
+        }
+        pid_string = malloc(i + 2); 
+        if (!pid_string)
+          return -1;
+
+        snprintf(pid_string, i + 1, "%d\n", pid);
+        write(fd, pid_string, i);
+
+        free(pid_string);
+        // note, leave PID_FILE open in case it gets unlinked by another
+        // program
+       
+        // daemons do not run in a tty, so these STD files are not needed
+        // leaving them around is a potential security vulnerability?
+        // also, even in the case where we don't want to daemonize, probably
+        // do not want to print out to stdout/err anyways...
+        close(STDIN_FILENO);
+        close(STDOUT_FILENO);
+        close(STDERR_FILENO);
+
+        return 0;
       }
-      pid_string = malloc(i + 2); 
-      if (!pid_string)
-        return -1;
-
-      snprintf(pid_string, i + 1, "%d\n", pid);
-      write(fd, pid_string, i);
-
-      free(pid_string);
-      // note, leave PID_FILE open in case it gets unlinked by another
-      // program
-     
-      // daemons do not run in a tty, so these STD files are not needed
-      // leaving them around is a potential security vulnerability?
-      // also, even in the case where we don't want to daemonize, probably
-      // do not want to print out to stdout/err anyways...
-      close(STDIN_FILENO);
-      close(STDOUT_FILENO);
-      close(STDERR_FILENO);
-
-      return 0;
     }
-  }
-  // else failed to lock pidfile
-  fprintf(stderr, 
-	  "Could not create/lock " PID_FILE ", is the daemon already running?\n");
-  return -1;
+    // else failed to lock pidfile
+    fprintf(stderr, 
+	    "Could not create/lock " PID_FILE ", is the daemon already running?\n");
+    return -1;
+  } 
+  // else, no pidfile to lock...
+  
+  close(STDIN_FILENO);
+  close(STDOUT_FILENO);
+  close(STDERR_FILENO);
+  
+  return 0;
 }
-
 
 int main(void)
 {
@@ -160,7 +188,8 @@ int main(void)
     fprintf(stderr, "Error in binding sockets.\n");
     exit(EXIT_FAILURE);
   }
-  if (daemonize() < 0) {
+
+  if (daemonize(pidfile) < 0) {
     fprintf(stderr, "Error in daemonizing process, goodbye.\n");
     exit(EXIT_FAILURE);
   }
@@ -181,22 +210,13 @@ int main(void)
 
   while(1) {
 
-    r = -1;
-    while(r < 0) {
-      FD_ZERO(&rdfs);
-      FD_SET(c_fd, &rdfs);
-      r = select(c_fd + 1, &rdfs, NULL, NULL, NULL);
-    }
-
     c_fd = ps_accept(s_fd, &cred);  
-  
   
     if (c_fd >= 0) {
       nd = malloc(sizeof(client_node));
       nd->c_fd = c_fd;
       nd->pid  = cred.pid; 
         
-      // don't really care about what is read, just as long as we get something
       // NOTE: c_fd is returned by ps_accept as a non-blocking socket!
       //    therefore, this read() will return immediately!
       if (read(c_fd, &temp, 1) > 0)
