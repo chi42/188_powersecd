@@ -1,5 +1,5 @@
-#ifndef __POWERSECD_H__
-#define __POWERSECD_H__
+#ifndef __PS_MAIN_H__
+#define __PS_MAIN_H__
 
 #define DAEMON       "powersecd"
 #define PID_FILE     "/var/run/powersecd.pid"
@@ -11,7 +11,7 @@
 
 // SLEEP_TIME specifies the amount of time between 
 // daemon actions, in seconds 
-#define SLEEP_SEC   8
+#define SLEEP_SEC   3
 #define SLEEP_USEC  0
 
 // not sure what this signal is going to be yet...

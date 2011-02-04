@@ -15,6 +15,7 @@
 #include "ps_main.h"
 #include "ps_list.h"
 #include "ps_sockets.h"
+#include "powersecd.h"
 
 // in hopes of reducing memory usage
 // is this actually necessary or will the compiler do magic to make it
@@ -30,7 +31,14 @@ static int daemonize(const char *pfile);
 static void sig_to_exit(int sig);
 static void sig_alarm(int sig);
 static void cleanup();
-static void *ps_listen_thread(void *ps_args);
+static int data_trans(int c_fd);
+
+static 
+int data_trans(int c_fd)
+{
+  //write(c_fd, , );  
+  return 0;
+}
 
 static
 void sig_to_exit(int sig)
@@ -49,15 +57,13 @@ void sig_alarm(int sig)
 
   // fetch new data here
 
-
   while(cn = ps_list_next(&g_clients)) {
-    if (cn->signal) 
-      if( write(cn->c_fd, &a, 1) < 0) {
-        close(cn->c_fd);
-        ps_list_del(&g_clients, cn);
-      } 
-      else 
-        kill(cn->pid, ALERT_SIG);
+    if (write(cn->c_fd, &a, 1) < 0) {
+      close(cn->c_fd);
+      ps_list_del(&g_clients, cn);
+    } 
+    else 
+      kill(cn->pid, ALERT_SIG);
   }
 }
 
@@ -207,9 +213,6 @@ int main(void)
     c_fd = ps_accept(s_fd, &cred);  
   
     if (c_fd >= 0) {
-      nd = malloc(sizeof(client_node));
-      nd->c_fd = c_fd;
-      nd->pid  = cred.pid; 
       
       // this read will block  
       if (read(c_fd, &cli_type, 1) > 0) {
@@ -222,6 +225,9 @@ int main(void)
           close(c_fd);
         }
         else if (cli_type == PS_REGISTER) {
+          nd = malloc(sizeof(client_node));
+          nd->c_fd = c_fd;
+          nd->pid  = cred.pid; 
           ps_list_add(&g_clients, nd);
         }
         else
