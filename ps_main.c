@@ -12,7 +12,7 @@
 #include <sys/time.h>
 #include <stdint.h>
 
-#include "powersec.h"
+#include "ps_main.h"
 #include "ps_list.h"
 #include "ps_sockets.h"
 
@@ -53,7 +53,7 @@ void sig_alarm(int sig)
   while(cn = ps_list_next(&g_clients)) {
     if (cn->signal) 
       if( write(cn->c_fd, &a, 1) < 0) {
-        syslog(LOG_INFO, "FOUND BAD NODE, DUMPING\n");
+        close(cn->c_fd);
         ps_list_del(&g_clients, cn);
       } 
       else 
@@ -67,13 +67,6 @@ void cleanup()
   unlink(socketname);
   unlink(pidfile);
   closelog();
-}
-
-static 
-void data_proc()
-{
-  daemonize(NULL);
-
 }
 
 static
@@ -177,7 +170,7 @@ int main(void)
   client_node *nd;
   sigset_t sigs;
   int r, c_fd, s_fd = -1;
-  uint8_t temp;
+  uint8_t cli_type;
 
   fd_set rdfs;
   struct timeval tv;  
@@ -208,6 +201,7 @@ int main(void)
   timer_v.it_value.tv_usec = SLEEP_USEC;
   setitimer(ITIMER_REAL, &timer_v, NULL);
 
+  // the 'event' loop
   while(1) {
 
     c_fd = ps_accept(s_fd, &cred);  
@@ -216,21 +210,30 @@ int main(void)
       nd = malloc(sizeof(client_node));
       nd->c_fd = c_fd;
       nd->pid  = cred.pid; 
-        
-      // NOTE: c_fd is returned by ps_accept as a non-blocking socket!
-      //    therefore, this read() will return immediately!
-      if (read(c_fd, &temp, 1) > 0)
-        nd->signal = 1;
-      else 
-        nd->signal = 0;
-
-      // now we enter the critical section, block delievery of SIGALARM 
-      sigprocmask(SIG_BLOCK, &sigs, NULL);
-
-      ps_list_add(&g_clients, nd);
       
-      sigprocmask(SIG_UNBLOCK, &sigs, NULL);
-      // end of critical section, unblock SIGALARM
+      // this read will block  
+      if (read(c_fd, &cli_type, 1) > 0) {
+
+        // now we enter the critical section, block delievery of SIGALARM 
+        sigprocmask(SIG_BLOCK, &sigs, NULL);
+        
+        if(cli_type == PS_DATAONLY) {
+          data_trans(c_fd);
+          close(c_fd);
+        }
+        else if (cli_type == PS_REGISTER) {
+          ps_list_add(&g_clients, nd);
+        }
+        else
+          close(c_fd);
+          
+        sigprocmask(SIG_UNBLOCK, &sigs, NULL);
+        // end of critical section, unblock SIGALARM
+      } 
+      else 
+        // else, the read failed or was interrupted, either way, we kill 
+        // the connection
+        close(c_fd);
     }
   }
   return 0;

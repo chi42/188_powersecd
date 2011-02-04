@@ -7,6 +7,8 @@
 #define SOCKET_NAME  "/var/run/powersecd.socket"
 #define DATA_SOCKET  "/var/run/powersecd_data.socket"
 
+
+
 // SLEEP_TIME specifies the amount of time between 
 // daemon actions, in seconds 
 #define SLEEP_SEC   8

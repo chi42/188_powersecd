@@ -37,7 +37,7 @@ int ps_create(const char *soc_name)
   if (res < 0) 
     return res;
 
-  fcntl(fd, F_SETFL, O_NONBLOCK);
+  //fcntl(fd, F_SETFL, O_NONBLOCK);
 
   return fd;
 }
@@ -71,7 +71,7 @@ int ps_accept(int fd, struct ps_ucred *cred)
   }
 
   // this socket is non blocking!!!
-  fcntl(new_fd, F_SETFL, O_NONBLOCK);
+  // fcntl(new_fd, F_SETFL, O_NONBLOCK);
 
   if (cred) {
     len = sizeof(struct ps_ucred);
