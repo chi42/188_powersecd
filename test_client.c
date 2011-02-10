@@ -8,6 +8,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <signal.h>
+#include <stdint.h>
 #include <errno.h>
 
 #define SOCK_PATH "/var/run/powersecd.socket"
@@ -20,9 +21,11 @@ void handler(int sign)
 
 int main(void)
 {
+  
     int s, t, len;
     struct sockaddr_un remote;
     char str[100];
+    unsigned int temp;
 
     signal(SIGUSR1, handler);
 
@@ -42,16 +45,19 @@ int main(void)
     }
 
     printf("Connected.\n");
-    write(s, "a", 1);
+    write(s, "\x02", 1);
 
 
     while(1) {
 
       sleep(10);
-      if (errno == EINTR)
-        printf("SIGNAL reccieved!\n");
-    }
-      
+      if (errno == EINTR) {
+	      if( read(s, &temp, 4) > 0) 
+          printf("SIGNAL reccieved! %d \n", temp);
+        else
+          printf("SIGNAL, no data\n");
+      }
+    }  
     //while(printf("> "), fgets(str, 100, stdin), !feof(stdin)) {
     //    if (send(s, str, strlen(str), 0) == -1) {
     //        perror("send");

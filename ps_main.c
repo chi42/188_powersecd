@@ -5,7 +5,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <fcntl.h>
+ #include <fcntl.h>
 #include <errno.h>
 #include <syslog.h>
 #include <signal.h>
@@ -58,12 +58,12 @@ void sig_alarm(int sig)
   // fetch new data here
 
   while(cn = ps_list_next(&g_clients)) {
-    if (write(cn->c_fd, &a, 1) < 0) {
+    if (write(cn->c_fd, &(g_clients.size), 4) < 0) {
       close(cn->c_fd);
       ps_list_del(&g_clients, cn);
     } 
     else 
-      kill(cn->pid, ALERT_SIG);
+      kill(cn->pid, SIGUSR1);
   }
 }
 
@@ -118,55 +118,48 @@ int daemonize(const char *pfile)
   sigaction(SIGQUIT, &s_action, NULL);
   sigaction(SIGINT,  &s_action, NULL);
 
+
   // open for logging
   openlog(DAEMON, LOG_NDELAY, LOG_DAEMON);
 
-  if(pfile) {
-    // get the pid file and lock it
-    // lock file is also locked by the starting script, but we also
-    //    leave this here for the sake of things
-    fd = open(pfile, O_WRONLY|O_CREAT, 640);
-    if (fd >= 0) {
-      if (lockf(fd, F_TLOCK, 0) >= 0) {
+  // get the pid file and lock it
+  // lock file is also locked by the starting script, but we also
+  //    leave this here for the sake of things
+  fd = open(pfile, O_WRONLY|O_CREAT, 640);
+  if (fd >= 0) {
+    if (lockf(fd, F_TLOCK, 0) >= 0) {
 
-        t = pid = getpid();
-        for(i = 1; t > 0; ++i) {
-          t /= 10;
-        }
-        pid_string = malloc(i + 2); 
-        if (!pid_string)
-          return -1;
-
-        snprintf(pid_string, i + 1, "%d\n", pid);
-        write(fd, pid_string, i);
-
-        free(pid_string);
-        // note, leave PID_FILE open in case it gets unlinked by another
-        // program
-       
-        // daemons do not run in a tty, so these STD files are not needed
-        // leaving them around is a potential security vulnerability?
-        // also, even in the case where we don't want to daemonize, probably
-        // do not want to print out to stdout/err anyways...
-        close(STDIN_FILENO);
-        close(STDOUT_FILENO);
-        close(STDERR_FILENO);
-
-        return 0;
+      t = pid = getpid();
+      for(i = 1; t > 0; ++i) {
+	t /= 10;
       }
+      pid_string = malloc(i + 2); 
+      if (!pid_string)
+	return -1;
+
+      snprintf(pid_string, i + 1, "%d\n", pid);
+      write(fd, pid_string, i);
+
+      free(pid_string);
+      // note, leave PID_FILE open in case it gets unlinked by another
+      // program
+
+      // daemons do not run in a tty, so these STD files are not needed
+      // leaving them around is a potential security vulnerability?
+      // also, even in the case where we don't want to daemonize, probably
+      // do not want to print out to stdout/err anyways...
+      close(STDIN_FILENO);
+      close(STDOUT_FILENO);
+      close(STDERR_FILENO);
+
+      return 0;
     }
-    // else failed to lock pidfile
-    fprintf(stderr, 
-	    "Could not create/lock " PID_FILE ", is the daemon already running?\n");
-    return -1;
-  } 
-  // else, no pidfile to lock...
-  
-  close(STDIN_FILENO);
-  close(STDOUT_FILENO);
-  close(STDERR_FILENO);
-  
-  return 0;
+  }
+  // else failed to lock pidfile
+  fprintf(stderr, 
+	  "Could not create/lock " PID_FILE ", is the daemon already running?\n");
+  return -1;
+
 }
 
 int main(void)
