@@ -5,7 +5,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
- #include <fcntl.h>
+#include <fcntl.h>
 #include <errno.h>
 #include <syslog.h>
 #include <signal.h>
@@ -78,7 +78,7 @@ static
 int daemonize(const char *pfile)
 {
   char *pid_string;
-  int i, t, fd;
+n  int i, t, fd;
   struct sigaction s_action;
   pid_t pid, sid;
 
