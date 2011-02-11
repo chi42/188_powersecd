@@ -22,7 +22,6 @@
 // happen for me?
 static const char *pidfile = PID_FILE;
 static const char *socketname = SOCKET_NAME;
-static const char *dat_socketname = DATA_SOCKET;
 
 // global list of client processes
 static ps_list g_clients;
@@ -95,9 +94,6 @@ int daemonize(const char *pfile)
   if (sid < 0)
     return -1;
   
-  // clear file mask
-  umask(0);
-
   // go to root dir
   if (chdir("/") < 0)
     return -1;
@@ -118,6 +114,8 @@ int daemonize(const char *pfile)
   sigaction(SIGQUIT, &s_action, NULL);
   sigaction(SIGINT,  &s_action, NULL);
 
+  // clear file mask  
+  umask(0);
 
   // open for logging
   openlog(DAEMON, LOG_NDELAY, LOG_DAEMON);
@@ -125,17 +123,17 @@ int daemonize(const char *pfile)
   // get the pid file and lock it
   // lock file is also locked by the starting script, but we also
   //    leave this here for the sake of things
-  fd = open(pfile, O_WRONLY|O_CREAT, 640);
+  fd = open(pfile, O_WRONLY|O_CREAT, 0444);
   if (fd >= 0) {
     if (lockf(fd, F_TLOCK, 0) >= 0) {
 
       t = pid = getpid();
       for(i = 1; t > 0; ++i) {
-	t /= 10;
+	      t /= 10;
       }
       pid_string = malloc(i + 2); 
       if (!pid_string)
-	return -1;
+	      return -1;
 
       snprintf(pid_string, i + 1, "%d\n", pid);
       write(fd, pid_string, i);
@@ -151,7 +149,7 @@ int daemonize(const char *pfile)
       close(STDIN_FILENO);
       close(STDOUT_FILENO);
       close(STDERR_FILENO);
-
+		  
       return 0;
     }
   }

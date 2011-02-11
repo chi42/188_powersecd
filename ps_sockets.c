@@ -37,6 +37,7 @@ int ps_create(const char *soc_name)
   if (res < 0) 
     return res;
 
+  chmod(soc_name, 0666);
   //fcntl(fd, F_SETFL, O_NONBLOCK);
 
   return fd;

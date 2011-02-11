@@ -11,7 +11,7 @@
 #include <stdint.h>
 #include <errno.h>
 
-#define SOCK_PATH "/var/run/powersecd.socket"
+#define SOCK_PATH "/var/run/powersecd.sock"
 
 void handler(int sign) 
 {
