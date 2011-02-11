@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+//#include <syslog.h>
 
 #include "ps_list.h"
 
@@ -28,8 +29,9 @@ int ps_list_add(ps_list *list, client_node* node)
   list->size += 1;
   node->next = list->head;
   list->head = node;
-
-    return 0;
+  node->prev = NULL;
+  
+  return 0;
 }
 
 
@@ -43,7 +45,6 @@ int ps_list_del(ps_list *list, client_node* node)
   b = node->next;
 
   list->size -= 1;
-
   if (a) 
     a->next = b;
   else 
@@ -53,7 +54,6 @@ int ps_list_del(ps_list *list, client_node* node)
 
   if (list->curr == node) 
     list->curr = a;
-
   free(node);  
 
   return 0;
