@@ -16,6 +16,7 @@
 #include "ps_list.h"
 #include "ps_sockets.h"
 #include "powersecd.h"
+#include "ps_data.h"
 
 // in hopes of reducing memory usage
 // is this actually necessary or will the compiler do magic to make it
@@ -31,6 +32,20 @@ static void sig_to_exit(int sig);
 static void sig_alarm(int sig);
 static void cleanup();
 static int data_trans(int c_fd);
+static int write_all(int fd, char *buf, int b_size);
+
+static
+int write_all(int fd, char *buf, int b_size)
+{
+  int r = 0;
+  do {
+    r = write(fd, buf + r, b_size - r);
+    if (r < 0)
+      return r;
+  } while(b_size - r);
+
+  return 0;
+}
 
 static 
 int data_trans(int c_fd)
@@ -52,12 +67,17 @@ static
 void sig_alarm(int sig) 
 {
   client_node *cn;
-  int a;
-
+  int r;
+  ps_dat dat;
+  uint8_t buffer[8];
   // fetch new data here
 
+  ps_data_fetch(&dat);
+
+  r = snprintf(buffer, 8, "%u %u %u", dat.power, dat.security, dat.plug);
+  syslog(LOG_INFO, "%s %d \n", buffer, r);
   while(cn = ps_list_next(&g_clients)) {
-    if (write(cn->c_fd, &(g_clients.size), 4) < 0) {
+    if (write_all(cn->c_fd, buffer, r + 1) < 0) {
       close(cn->c_fd);
       ps_list_del(&g_clients, cn);
     } 
@@ -78,7 +98,7 @@ static
 int daemonize(const char *pfile)
 {
   char *pid_string;
-n  int i, t, fd;
+  int i, t, fd;
   struct sigaction s_action;
   pid_t pid, sid;
 
@@ -133,7 +153,7 @@ n  int i, t, fd;
       }
       pid_string = malloc(i + 2); 
       if (!pid_string)
-	      return -1;
+	return -1;
 
       snprintf(pid_string, i + 1, "%d\n", pid);
       write(fd, pid_string, i);

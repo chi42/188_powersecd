@@ -15,7 +15,8 @@
 
 void handler(int sign) 
 {
-        //printf("SIGNAL reccieved!\n");
+	//printf("FFFFF\n");
+	printf("\n");
     return;
 }
 
@@ -25,7 +26,7 @@ int main(void)
     int s, t, len;
     struct sockaddr_un remote;
     char str[100];
-    unsigned int temp;
+    char buffer[8];
 
     signal(SIGUSR1, handler);
 
@@ -52,8 +53,10 @@ int main(void)
 
       sleep(10);
       if (errno == EINTR) {
-	      if( read(s, &temp, 4) > 0) 
-          printf("SIGNAL reccieved! %d \n", temp);
+	if( read(s, &buffer, 7) > 0) {
+	  buffer[8] = '\0';
+	  printf("SIGNAL! %s ", buffer);
+	}
         else
           printf("SIGNAL, no data\n");
       }

@@ -2,7 +2,7 @@
 
 CC = gcc
 CFLAGS = -O2
-OBJECTS = ps_main.o ps_sockets.o ps_list.o
+OBJECTS = ps_main.o ps_sockets.o ps_list.o ps_data.o
 BIN = powersecd
 
 $(BIN) : $(OBJECTS)
@@ -16,6 +16,9 @@ ps_sockets.o : ps_sockets.c ps_sockets.h
 
 ps_list.o : ps_list.c ps_list.h
 	$(CC) $(CFLAGS) -c ps_list.c
+
+ps_data.o : ps_data.c ps_data.h
+	$(CC) $(CLFAGS) -c ps_data.c
 
 clean:
 	-rm $(OBJECTS) 
