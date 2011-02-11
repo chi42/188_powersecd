@@ -11,6 +11,7 @@
 #include <signal.h>
 #include <sys/time.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 #include "ps_main.h"
 #include "ps_list.h"
@@ -31,7 +32,6 @@ static int daemonize(const char *pfile);
 static void sig_to_exit(int sig);
 static void sig_alarm(int sig);
 static void cleanup();
-static int data_trans(int c_fd);
 static int write_all(int fd, char *buf, int b_size);
 
 static
@@ -47,12 +47,6 @@ int write_all(int fd, char *buf, int b_size)
   return 0;
 }
 
-static 
-int data_trans(int c_fd)
-{
-  //write(c_fd, , );  
-  return 0;
-}
 
 static
 void sig_to_exit(int sig)
@@ -67,23 +61,36 @@ static
 void sig_alarm(int sig) 
 {
   client_node *cn;
-  int r;
+  int r, send = 0;
   ps_dat dat;
   uint8_t buffer[8];
+
+  static uint8_t power, security, plug = 255;
+
   // fetch new data here
-
   ps_data_fetch(&dat);
-
-  r = snprintf(buffer, 8, "%u %u %u", dat.power, dat.security, dat.plug);
-  syslog(LOG_INFO, "%s %d \n", buffer, r);
-  while(cn = ps_list_next(&g_clients)) {
-    if (write_all(cn->c_fd, buffer, r + 1) < 0) {
-      close(cn->c_fd);
-      ps_list_del(&g_clients, cn);
-    } 
-    else 
-      kill(cn->pid, SIGUSR1);
+  if (plug != 255) {
+    send += abs(power - dat.power);
+    send += abs(security - dat.security);
   }
+  else
+    send = 255;
+  
+  if (send || plug != dat.plug) {
+    r = snprintf(buffer, 8, "%u %u %u", dat.power, dat.security, dat.plug);
+    while(cn = ps_list_next(&g_clients)) {
+      if (write_all(cn->c_fd, buffer, r + 1) < 0) {
+	close(cn->c_fd);
+	ps_list_del(&g_clients, cn);
+      } 
+      else 
+	kill(cn->pid, SIGUSR1 );
+    }
+  }
+  
+  power = dat.power;
+  security = dat.security;
+  plug = dat.plug;
 }
 
 static
@@ -232,7 +239,7 @@ int main(void)
         sigprocmask(SIG_BLOCK, &sigs, NULL);
         
         if(cli_type == PS_DATAONLY) {
-          data_trans(c_fd);
+          //data_trans(c_fd);
           close(c_fd);
         }
         else if (cli_type == PS_REGISTER) {
