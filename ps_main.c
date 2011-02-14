@@ -1,7 +1,6 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
+#include <stdio.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -12,6 +11,7 @@
 #include <sys/time.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <time.h>
 
 #include "ps_main.h"
 #include "ps_list.h"
@@ -27,12 +27,15 @@ static const char *socketname = SOCKET_NAME;
 
 // global list of client processes
 static ps_list g_clients;
+static time_t g_last_get;
+static ps_dat g_dat;
 
 static int daemonize(const char *pfile);
 static void sig_to_exit(int sig);
 static void sig_alarm(int sig);
 static void cleanup();
 static int write_all(int fd, char *buf, int b_size);
+static void timer_set(long sec, long usec);
 
 static
 int write_all(int fd, char *buf, int b_size)
@@ -46,7 +49,6 @@ int write_all(int fd, char *buf, int b_size)
 
   return 0;
 }
-
 
 static
 void sig_to_exit(int sig)
@@ -62,35 +64,74 @@ void sig_alarm(int sig)
 {
   client_node *cn;
   int r, send = 0;
-  ps_dat dat;
-  uint8_t buffer[8];
+  uint8_t buffer[9];
+  
+  static unsigned int power, security, plug = 255;
+  
 
-  static uint8_t power, security, plug = 255;
+#ifdef PS_TEST_INFILE
+  static int no_get = 0;
+  int i;
+#endif
 
-  // fetch new data here
-  ps_data_fetch(&dat);
+  // point of all the preprocessors, is to remove the case
+  // of skipping a line in the input testfile when there is 
+  // only client and it decided to drop and reconnect
+#ifdef PS_TEST_INFILE
+  if (!no_get) {
+#endif
+
+  if (g_last_get + SLEEP_SEC <= time(NULL))
+    ps_data_fetch(&g_dat);
+
+#ifdef PS_TEST_INFILE
+  }
+  no_get = 0;
+  i = 0;
+#endif
+ 
   if (plug != 255) {
-    send += abs(power - dat.power);
-    send += abs(security - dat.security);
+    send = power ^ g_dat.power;
+    send |= security ^ g_dat.security;
+    send |= plug ^ g_dat.plug;
   }
   else
     send = 255;
-  
-  if (send || plug != dat.plug) {
-    r = snprintf(buffer, 8, "%u %u %u", dat.power, dat.security, dat.plug);
-    while(cn = ps_list_next(&g_clients)) {
-      if (write_all(cn->c_fd, buffer, r + 1) < 0) {
+
+  r = PSPRINT(buffer, g_dat);
+  while(cn = ps_list_next(&g_clients)) {
+
+    if (send || cn->first) {
+      if (write_all(cn->c_fd, buffer, MESG_SIZ) < 0) {
 	close(cn->c_fd);
 	ps_list_del(&g_clients, cn);
       } 
-      else 
-	kill(cn->pid, SIGUSR1 );
+      else {
+	kill(cn->pid, SIGUSR1);
+	cn->first = 0;
+#ifdef PS_TEST_INFILE
+	++i;
+#endif 
+      }
     }
   }
-  
-  power = dat.power;
-  security = dat.security;
-  plug = dat.plug;
+  // if there are no clients, we clear the alarm, wake only on new
+  // connection, which sends daemon into permanent blocking state
+  if (!g_clients.size)
+      timer_set(0, 0);
+
+#ifdef PS_TEST_INFILE
+  if (send && i < 1) {
+    no_get = 1;
+  }
+#endif
+
+  if (time(&g_last_get) < 0)
+    g_last_get = 0;
+	   
+  power = g_dat.power;
+  security = g_dat.security;
+  plug = g_dat.plug;
 }
 
 static
@@ -187,17 +228,30 @@ int daemonize(const char *pfile)
 
 }
 
+static
+void timer_set(long sec, long usec) 
+{
+  struct itimerval tv;
+
+  // set up timer, it will be raised regularly
+  tv.it_interval.tv_sec  = sec;
+  tv.it_interval.tv_usec = usec;
+  tv.it_value.tv_sec  = sec;
+  tv.it_value.tv_usec = usec;
+
+  setitimer(ITIMER_REAL, &tv, NULL);
+  
+  return;
+}
+
+
 int main(void)
 {
   struct ps_ucred cred;
-  struct itimerval timer_v;
   client_node *nd;
   sigset_t sigs;
   int r, c_fd, s_fd = -1;
-  uint8_t cli_type;
-
-  fd_set rdfs;
-  struct timeval tv;  
+  uint8_t cli_type, buffer[9];
 
   // open up socket, start listening
   s_fd = ps_create(socketname);
@@ -217,17 +271,13 @@ int main(void)
   sigaddset(&sigs, SIGALRM);
 
   ps_list_init(&g_clients);
-
-  // set up timer, it will be raised regularly
-  timer_v.it_interval.tv_sec  = SLEEP_SEC;
-  timer_v.it_interval.tv_usec = SLEEP_USEC;
-  timer_v.it_value.tv_sec  = SLEEP_SEC;
-  timer_v.it_value.tv_usec = SLEEP_USEC;
-  setitimer(ITIMER_REAL, &timer_v, NULL);
+  
+  g_last_get = 0;
+  g_dat.plug = 255;
 
   // the 'event' loop
   while(1) {
-
+    
     c_fd = ps_accept(s_fd, &cred);  
   
     if (c_fd >= 0) {
@@ -239,13 +289,21 @@ int main(void)
         sigprocmask(SIG_BLOCK, &sigs, NULL);
         
         if(cli_type == PS_DATAONLY) {
-          //data_trans(c_fd);
+	  if (g_last_get + SLEEP_SEC <= time(NULL))
+	    ps_data_fetch(&g_dat);
+
+          PSPRINT(buffer, g_dat);
+	  write_all(c_fd, buffer, MESG_SIZ);
           close(c_fd);
         }
         else if (cli_type == PS_REGISTER) {
+	  if (!(g_clients.size))
+	    timer_set(SLEEP_SEC, SLEEP_USEC);
+
           nd = malloc(sizeof(client_node));
-          nd->c_fd = c_fd;
-          nd->pid  = cred.pid; 
+          nd->c_fd  = c_fd;
+          nd->pid   = cred.pid; 
+	  nd->first = 1;
           ps_list_add(&g_clients, nd);
         }
         else

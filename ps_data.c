@@ -3,11 +3,11 @@
 #include <syslog.h>
 #include "ps_data.h"
 
-static int ps_data_battery_plug(uint8_t *battery, uint8_t *plug);
-static int ps_data_security(uint8_t *security);
+static int ps_data_battery_plug(unsigned int *battery, uint8_t *plug);
+static int ps_data_security(unsigned int *security);
 
 static 
-int ps_data_battery_plug(uint8_t *battery, uint8_t *plug) 
+int ps_data_battery_plug(unsigned int *battery, uint8_t *plug) 
 {
   *battery = 10;
   *plug = 1;
@@ -16,7 +16,7 @@ int ps_data_battery_plug(uint8_t *battery, uint8_t *plug)
 }
 
 static
-int ps_data_security(uint8_t *security)
+int ps_data_security(unsigned int *security)
 {
   *security = 10;
 
@@ -51,9 +51,9 @@ int ps_data_fetch(ps_dat *dat)
       ++loop;
       r = fscanf(test_f, "%u %u %u", &a, &b, &c);
       if (r == 3) {
-	dat->power = (uint8_t)a;
-	dat->security = (uint8_t)b;
-	dat->plug = (uint8_t)c;
+	dat->power = a;
+	dat->security = b;
+	dat->plug = (c ? 1 : 0);
 
 	loop = 0;
 	break;

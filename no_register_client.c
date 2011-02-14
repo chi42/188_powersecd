@@ -13,29 +13,14 @@
 #include <sys/select.h>
 
 #define SOCK_PATH "/var/run/powersecd.sock"
-int g_s;
 
-void handler(int sign) 
-{
-  char buffer[10];
-//  printf("SIG:\t");
-  if( read(g_s, &buffer, 8) > 0) {
-    buffer[8] = '\0';
-    printf("%s\n" , buffer);
-  }
-  else
-    perror("SIGNAL, no data\n");
-
-  return;
-}
 
 int main(void)
 {
   
-    int  t, len;
+    int t, len, g_s;
     struct sockaddr_un remote;
     char str[100];
-
 
     if ((g_s = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
         perror("socket");
@@ -52,32 +37,12 @@ int main(void)
         exit(1);
     }
 
-    write(g_s, "\x02", 1);
-    signal(SIGUSR1, handler);
+    write(g_s, "\x01", 1);
     printf("Connected.\n");
 
-
-    while(1) {
-	select(0, NULL, NULL, NULL, NULL);
-	printf("INTERRUPT!\n");
-    }
-      
-    //while(printf("> "), fgets(str, 100, stdin), !feof(stdin)) {
-    //    if (send(s, str, strlen(str), 0) == -1) {
-    //        perror("send");
-    //        exit(1);
-    //    }
-
-    //    if ((t=recv(s, str, 100, 0)) > 0) {
-    //        str[t] = '\0';
-    //        printf("echo> %s", str);
-    //    } else {
-    //        if (t < 0) perror("recv");
-    //        else printf("Server closed connection\n");
-    //        exit(1);
-    //    }
-    //}
-
-
+	
+    read(g_s, str, 8);
+    printf("recieved message: %s\n", str);
+          
     return 0;
 }

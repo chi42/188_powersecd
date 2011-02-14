@@ -18,7 +18,7 @@ ps_list.o : ps_list.c ps_list.h
 	$(CC) $(CFLAGS) -c ps_list.c
 
 ps_data.o : ps_data.c ps_data.h
-	$(CC) $(CLFAGS) -c ps_data.c
+	$(CC) $(CFLAGS) -c ps_data.c
 
 clean:
 	-rm $(OBJECTS) 
