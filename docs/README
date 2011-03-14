@@ -1,5 +1,8 @@
 PowerSec Daemon (powersecd)
 
+Source Repository for the daemon is avaliable at:
+github.com/chi42/188_powersecd
+
 This is an informal readme of the daemon's execution and usage:
 
 To build: execute: 
