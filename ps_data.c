@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <syslog.h>
 #include "ps_data.h"
+#include "powersecd.h"
 
 static int ps_data_battery_plug(unsigned int *battery, uint8_t *plug);
 static int ps_data_security(unsigned int *security);

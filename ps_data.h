@@ -6,7 +6,6 @@
 #define PS_PROC_BAT_F "/proc/battery/"
 #define PS_PROC_NET_F "/proc/net/dev"
 
-#define PS_TEST_INFILE "/ramdisk/ps_test_in"
 
 typedef struct ps_dat_t {
   unsigned int power;
