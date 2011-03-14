@@ -1,10 +1,9 @@
 // just for testing the linked list functions 
 
+#include "../ps_list.h"
 
 #include <stdio.h>
 #include <stdlib.h>
-
-#include "ps_list.h"
 
 
 int main ()
@@ -45,5 +44,7 @@ int main ()
   
   printf("size %d\n", lis.size);  
 
-
+  return 0;
 }
+
+
