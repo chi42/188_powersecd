@@ -76,7 +76,7 @@ void sig_alarm(int sig)
 
   // point of all the preprocessors, is to remove the case
   // of skipping a line in the input testfile when there is 
-  // only client and it decided to drop and reconnect
+  // only 1 client and it decided to drop and reconnect
 #ifdef PS_TEST_INFILE
   if (!no_get) {
 #endif
