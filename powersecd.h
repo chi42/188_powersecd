@@ -10,3 +10,4 @@
 #define SOCKET_NAME  "/var/run/powersecd.sock"
 
 #endif
+

@@ -2,53 +2,90 @@ PowerSec Daemon (powersecd)
 
 This is an informal readme of the daemon's execution and usage:
 
-So the deamon is currently running straight out of my home directory, /home/ncwong/188_powersecd/, just cd into there and call "./powersecd" to start it up. you will need to be root. if the daemon is already up, it will refuse to start another instance.
+To build: execute: 
+  make
 
-To kill the daemon, just raise SIGTERM. This can easily done by issuing: kill $(cat /var/run/powersecd.pid)
+To run daemon:
+  # become root 
+  ./powersecd
+If the daemon is already up it will refuse to start another instance
 
-If you want to check if the daemon is still running, you can check to see if /var/run/powersecd.pid exists. This pid file will be deleted by the daemon when it dies
+To kill the daemon, just raise SIGTERM. This can easily done by issuing: 
+  kill $(cat /var/run/powersecd.pid)
 
-I used syslog to log messages, they will appear in /var/log/messages and will be labeled as "powersecd". don't expect to see too many exciting things in here.
+If you want to check if the daemon is still running, you can check to see if
+/var/run/powersecd.pid exists. This pid file will be deleted by the daemon 
+when it dies
 
-Using test input: The daemon can take your input from file and report it back as though it is real power/security level data. You should put data in /etc/ps_test_in
-Data must be formatted as follows:
-"<POWER_LEVEL range(1, 10)> <SECURITY_LEVEL range(1, 10)> <PLUG STATUS range(0,1)>
-There is already an example file, feel free to take a look. Note that you can stick extra whitespaces in however you feel like.
+I used syslog to log messages, they will appear in /var/log/messages and will 
+be labeled as "powersecd". don't expect to see too many exciting things in here.
 
-Because this input file is purely for testing purposes, the daemon will die or start singing daisy if you put bad input in the file, so don't do that. Possibly a raptor will kill you, I dunno.
+Using test input: The daemon can take your input from file and report it back 
+as though it is real power/security level data. You should put data in 
+/ram/ps_test_in. data must be formatted as follows:
+  <POWER_LEVEL range(1, 10)> 
+  <SECURITY_LEVEL range(1, 10)> 
+  <PLUG STATUS range(0,1)> 
 
-When the daemon reaches the end of the input file, it will loop back to the top and start reporting new data.
+- Note that you can stick extra whitespaces in however you feel like.
+- Because this input file is purely for testing purposes, the daemon will die or
+    start singing daisy if you put bad input in the file, so don't do that. 
+    Possibly a raptor will kill you, I dunno. 
+-When the daemon reaches the end of the input file, it will loop back to the 
+    top and start reporting new data.
+-Each triple (power security plug) of data points corresponds to 2 seconds in 
+    real time. i.e. every 2 seconds the daemon will report the next line in the 
+    ps_test_in file to a client.
 
-Each triple (power security plug) of data points corresponds to 2 seconds in real time. i.e. every 2 seconds the daemon will report the next line in the ps_test_in file to a client.
-
-In testing mode, the daemon will not start reporting data or reading data from test input file until a client actually connects to it.
-
-If you change the test input file, you will want to kill the daemon and then bring it back up.
+-In testing mode, the daemon will not start reporting data or reading data from 
+    test input file until a client actually connects to it.
+-If you change the test input file, you will want to kill the daemon and then 
+    bring it back up.
 
 --- CONNECTING TO THE DAEMON
-if you look in my home directory in 188_powersecd you will find two example clients:
-test_client.c (binary file "client") registers itself with the daemon and sleeps until the daemon reports a change in the power/security/plug level
-no_register_connect.c (binary file "nclient") checks requests current power/security levels and then quits immediately, it does not register for signalling with the daemon.
+-After running make you will find 3 example programs (titled ex_*).
+    -ex_simple_client - connects itself to the daemon in "registering" mode
+      and then sleep. Whenever it recieves a signal, it wakes up and prints
+      output to monitor.
+    -ex_data_to_file - similar to ex_simple_client except that instead of
+      writing data to stdout it writes it to file, this is used by the 
+      firefox plugin.
+    -ex_no_register_client - client does not register for signals, but instread
+      queries the daemon and then immediately disconnects itself and dies.
 
+-When using the daemon, remember that it uses unix domain IPC sockets, NOT 
+    TCP/UDP Internet sockets. The socket inode is at /var/run/powersecd.sock
 
+To connect in signal registering mode: open the socket and write the integer 
+"2". It is very important to note that this is not the ASCII value of "2", but 
+rather the actual number two, i.e. binary "0000 0010" sending ASCII "2" will 
+result in death by philosoraptor. Once you have registered your process, your
+process can take a nap or whatever, and the daemon will send the signal SIGUSR1
+when some value changes in the power/security environment (note that if there 
+is no change in the power/security environment, no signal will be sent, this 
+means that is you have the following lines "1 1 0" "1 1 1" "1 1 1" in your 
+test input file, that you will receive a signal for the first "1 1 1" but not 
+the second "1 1 1".) When the daemon sends the SIGUSR1 signal it will also write
+the new values into the open socket that your process holds.
 
-When using the daemon, remember that it uses unix domain IPC sockets, NOT TCP/UDP Internet sockets. The socket inode is at /var/run/powersecd.sock
+For signal handling in C, please note that using signal() is fine to register a 
+signal handler. However signal() is not thread safe, if your program has 
+multiple threads of execution then you should use sigprocmask(). Otherwise the 
+effects of the signal on your process will be undefined.
 
-To connect in signal registering mode: open the socket and write the integer "2". It is very important to note that this is not the ASCII value of "2", but rather the actual number two, i.e. binary "0000 0010" sending ASCII "2" will result in death by philosoraptor. Once you have registered your process, your process can take a nap or whatever, and the daemon will send the signal SIGUSR1 when some value changes in the power/security environment (note that if there is no change in the power/security environment, no signal will be sent, this means that is you have the following lines "1 1 0" "1 1 1" "1 1 1" in your test input file, that you will receive a signal for the first "1 1 1" but not the second "1 1 1".) When the daemon sends the SIGUSR1 signal it will also write the new values into the open socket that your process holds.
-
-For signal handling in C, please note that using signal() is fine to register a signal handler. However signal() is not thread safe, if your program has multiple threads of execution then you should use sigprocmask(). Otherwise the effects of the signal on your process will be undefined.
-
-Data from the socket holds the following form as an ASCII string (I apologize for the inconsistency here, I really do... I can hear the raptors coming for me)
+Data from the socket holds the following form as an ASCII string (I apologize 
+for the inconsistency here, I really do... I can hear the raptors coming for me)
 
 (power) (security) (plug)(NULL BYTE)
 This will ALWAYS be eight bytes (counting the null byte)
 power is 2 bytes, security is 2 bytes and plug is 1 byte.
 
-You can watch the "client" example program print out lines if you so desire.
+You can watch the "ex_simple_client" example program print out lines if you 
+so desire.
 
-Similarly, to get data without being forced to register, just issue integer value of "1" to the socket when you first open it. The daemon will immediately write back the power/security/plug level in the same format as above, and then close the connection. You will have to reopen the socket later on if you want to take to the daemon again.
+Similarly, to get data without being forced to register, just issue integer 
+value of "1" to the socket when you first open it. The daemon will immediately
+write back the power/security/plug level in the same format as above, and then 
+close the connection. You will have to reopen the socket later on if you want 
+to take to the daemon again.
 
-
-It is probably best of multiple people are not using the daemon at the same time, since you can only have one example input file at a time.
-
-Again, sorry for sending this out so late and for the rather rushed instructions... Hopefully it is  enough for you guys to get a decent understanding of what is going here... I will be out for most of Monday, so if you have questions, I probably will not respond to later tomorrow. 
